@@ -38,15 +38,16 @@ jobs:
           echo "🚀 Starting deployment..."
           
           cd ~/myapp
-          echo "📥 Resetting any local changes..."
-          git reset --hard HEAD
-          git clean -fd
+          echo "📥 Pulling latest changes..."
           git pull origin main
           
-          echo "🔄 Running update..."
-          chmod +x setup.sh
-          ./setup.sh update
+          echo "🐳 Building and deploying..."
+          docker build -t myapp:latest . --no-cache
+          docker stop myapp || true
+          docker rm myapp || true
+          docker run -d --name myapp -p 8181:8181 myapp:latest
           
           echo "✅ Deployment completed!"
+          docker ps
 
         
