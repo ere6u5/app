@@ -14,11 +14,84 @@ fi
 APP_USER=$(whoami)
 APP_HOME="/home/$APP_USER"
 APP_DIR="$APP_HOME/myapp"
+SSH_DIR="$APP_HOME/.ssh"
+GITHUB_KEY="$SSH_DIR/github_actions"
 
 install_dependencies() {
     echo "📦 Installing dependencies..."
     sudo apt update
-    sudo apt install -y python3 python3-pip wget
+    sudo apt install -y python3 python3-pip wget git
+}
+
+setup_ssh_for_github() {
+    echo "🔑 Setting up SSH for GitHub Actions..."
+    
+    # Создаем .ssh директорию если нет
+    mkdir -p $SSH_DIR
+    chmod 700 $SSH_DIR
+    
+    # Генерируем SSH ключ если нет
+    if [ ! -f "$GITHUB_KEY" ]; then
+        echo "📝 Generating new SSH key for GitHub Actions..."
+        ssh-keygen -t ed25519 -C "github-actions-$(hostname)" -f "$GITHUB_KEY" -N ""
+        echo "✅ SSH key generated"
+    else
+        echo "✅ SSH key already exists"
+    fi
+    
+    # Добавляем в authorized_keys
+    if ! grep -q "$(cat ${GITHUB_KEY}.pub)" $SSH_DIR/authorized_keys 2>/dev/null; then
+        cat ${GITHUB_KEY}.pub >> $SSH_DIR/authorized_keys
+        echo "✅ Added to authorized_keys"
+    fi
+    
+    # Настраиваем права
+    chmod 600 $SSH_DIR/authorized_keys
+    chmod 600 $GITHUB_KEY
+    chmod 644 ${GITHUB_KEY}.pub
+    
+    # Показываем информацию для GitHub Secrets
+    echo ""
+    echo "📋 === GITHUB SECRETS SETUP ==="
+    echo "Add these to your GitHub repository secrets:"
+    echo ""
+    echo "SERVER_HOST: $(hostname -I | awk '{print $1}')"
+    echo "SERVER_USER: $APP_USER"
+    echo "SERVER_SSH_KEY:"
+    cat $GITHUB_KEY
+    echo ""
+    echo "📍 Save the above private key completely as SERVER_SSH_KEY secret"
+}
+
+setup_ssh_port() {
+    echo "🔧 Configuring SSH port 2438..."
+    
+    # Проверяем текущую конфигурацию SSH
+    if ! sudo grep -q "^Port 2438" /etc/ssh/sshd_config; then
+        echo "🔄 Adding port 2438 to SSH config..."
+        
+        # Создаем backup
+        sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+        
+        # Добавляем порт 2438 (дополнительно к основному)
+        if sudo grep -q "^Port " /etc/ssh/sshd_config; then
+            # Если уже есть Port, добавляем второй порт
+            echo "Port 2438" | sudo tee -a /etc/ssh/sshd_config
+        else
+            # Заменяем/добавляем порт
+            sudo sed -i 's/^#Port 22/Port 22\nPort 2438/' /etc/ssh/sshd_config
+        fi
+        
+        # Рестартуем SSH
+        sudo systemctl restart ssh
+        echo "✅ SSH port 2438 configured"
+    else
+        echo "✅ SSH port 2438 already configured"
+    fi
+    
+    # Проверяем что порт слушается
+    echo "🔍 Checking SSH ports..."
+    sudo netstat -tlnp | grep sshd || echo "⚠️  SSHD not found in netstat"
 }
 
 setup_app() {
@@ -88,6 +161,11 @@ check_status() {
     echo "Local: http://localhost:8181"
     echo "External: http://app.${ID}.${PROXY}"
     echo ""
+    echo "🔑 === SSH Info ==="
+    echo "SSH Host: $(hostname -I | awk '{print $1}')"
+    echo "SSH Port: 2438"
+    echo "SSH User: $APP_USER"
+    echo ""
     echo "📝 === Useful Commands ==="
     echo "View app logs: journalctl -u myapp -f"
     echo "View frp logs: journalctl -u frpc -f"
@@ -97,11 +175,17 @@ check_status() {
 case "$1" in
     install)
         install_dependencies
+        setup_ssh_for_github
+        setup_ssh_port
         setup_app
         setup_systemd
         setup_frp
         start_services
         check_status
+        ;;
+    ssh-setup)
+        setup_ssh_for_github
+        setup_ssh_port
         ;;
     start)
         start_services
@@ -126,12 +210,14 @@ case "$1" in
         echo "✅ Application updated and restarted"
         ;;
     *)
-        echo "Usage: $0 {install|start|stop|restart|status|update}"
+        echo "Usage: $0 {install|ssh-setup|start|stop|restart|status|update}"
         echo ""
         echo "📋 Complete setup:"
         echo "1. Add variables to ~/.bashrc"
         echo "2. Run: source ~/.bashrc"  
         echo "3. Run: ./setup.sh install"
+        echo ""
+        echo "🔑 SSH setup only: ./setup.sh ssh-setup"
         exit 1
         ;;
 esac
