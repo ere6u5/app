@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🚀 MyApp Setup Script"
+echo "🚀 MyApp Setup Script (Docker Version)"
 
 # Проверяем переменные окружения
 if [ -z "$PROXY" ] || [ -z "$TOKEN" ] || [ -z "$ID" ]; then
@@ -16,11 +16,15 @@ APP_HOME="/home/$APP_USER"
 APP_DIR="$APP_HOME/myapp"
 SSH_DIR="$APP_HOME/.ssh"
 GITHUB_KEY="$SSH_DIR/github_actions"
+DOCKER_IMAGE="myapp:latest"
+DOCKER_CONTAINER="myapp"
 
 install_dependencies() {
     echo "📦 Installing dependencies..."
     sudo apt update
-    sudo apt install -y python3 python3-pip wget git openssh-server
+    sudo apt install -y docker.io docker-compose wget git openssh-server net-tools curl
+    sudo usermod -aG docker $USER
+    echo "✅ Dependencies installed. Please logout and login again for docker group to take effect, or run: newgrp docker"
 }
 
 setup_ssh_for_github() {
@@ -119,7 +123,7 @@ EOF
     
     # Проверяем что порт слушается
     echo "🔍 Checking SSH ports..."
-    sudo netstat -tlnp | grep sshd || echo "⚠️  SSHD not found in netstat"
+    sudo ss -tlnp | grep :2438 || echo "⚠️  Port 2438 not listening"
 }
 
 setup_app() {
@@ -129,27 +133,48 @@ setup_app() {
     mkdir -p $APP_DIR
     
     # Копируем файлы приложения
-    cp app.py requirements.txt $APP_DIR/
+    cp app.py requirements.txt Dockerfile $APP_DIR/
     
-    # Устанавливаем Python зависимости
-    pip3 install -r $APP_DIR/requirements.txt
+    # Собираем Docker образ
+    echo "🐳 Building Docker image..."
+    cd $APP_DIR
+    docker build -t $DOCKER_IMAGE .
+    cd -
     
     echo "✅ Application setup completed"
 }
 
 setup_systemd() {
-    echo "⚙️ Setting up systemd service..."
+    echo "⚙️ Setting up systemd service for Docker..."
     
-    # Копируем сервис файл с подстановкой пользователя
-    sed "s/%i/$APP_USER/g" myapp.service > myapp_processed.service
-    sudo cp myapp_processed.service /etc/systemd/system/myapp.service
-    rm myapp_processed.service
+    # Создаем systemd сервис для Docker контейнера
+    cat > myapp-docker.service <<EOF
+[Unit]
+Description=My Flask Application (Docker)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=$APP_USER
+ExecStart=/usr/bin/docker run --rm --name $DOCKER_CONTAINER -p 8181:8181 $DOCKER_IMAGE
+ExecStop=/usr/bin/docker stop $DOCKER_CONTAINER
+ExecReload=/usr/bin/docker restart $DOCKER_CONTAINER
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    sudo cp myapp-docker.service /etc/systemd/system/myapp.service
+    rm myapp-docker.service
     
     # Перечитываем systemd
     sudo systemctl daemon-reload
     sudo systemctl enable myapp
     
-    echo "✅ Systemd service configured"
+    echo "✅ Systemd service for Docker configured"
 }
 
 setup_frp() {
@@ -182,6 +207,9 @@ check_status() {
     echo "📊 === Service Status ==="
     sudo systemctl status myapp --no-pager -l 2>/dev/null || echo "⚠️  myapp service not running"
     echo ""
+    echo "🐳 === Docker Status ==="
+    docker ps | grep $DOCKER_CONTAINER || echo "⚠️  Docker container not running"
+    echo ""
     echo "🔗 === FRP Status ==="
     sudo systemctl status frpc --no-pager -l 2>/dev/null || echo "⚠️  frpc service not running"
     echo ""
@@ -196,8 +224,10 @@ check_status() {
     echo ""
     echo "📝 === Useful Commands ==="
     echo "View app logs: journalctl -u myapp -f"
+    echo "View docker logs: docker logs -f $DOCKER_CONTAINER"
     echo "View frp logs: journalctl -u frpc -f"
     echo "Restart app: sudo systemctl restart myapp"
+    echo "Docker shell: docker exec -it $DOCKER_CONTAINER /bin/bash"
 }
 
 case "$1" in
@@ -233,12 +263,22 @@ case "$1" in
         ;;
     update)
         # Для обновления из репозитория
+        echo "🔄 Updating application..."
         setup_app
         sudo systemctl restart myapp
         echo "✅ Application updated and restarted"
         ;;
+    docker-build)
+        echo "🐳 Building Docker image..."
+        cd $APP_DIR
+        docker build -t $DOCKER_IMAGE .
+        cd -
+        ;;
+    docker-logs)
+        docker logs -f $DOCKER_CONTAINER
+        ;;
     *)
-        echo "Usage: $0 {install|ssh-setup|start|stop|restart|status|update}"
+        echo "Usage: $0 {install|ssh-setup|start|stop|restart|status|update|docker-build|docker-logs}"
         echo ""
         echo "📋 Complete setup:"
         echo "1. Add variables to ~/.bashrc"
@@ -246,6 +286,9 @@ case "$1" in
         echo "3. Run: ./setup.sh install"
         echo ""
         echo "🔑 SSH setup only: ./setup.sh ssh-setup"
+        echo "🐳 Docker commands:"
+        echo "   Build image: ./setup.sh docker-build"
+        echo "   View logs: ./setup.sh docker-logs"
         exit 1
         ;;
 esac
