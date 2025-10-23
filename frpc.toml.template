@@ -1,5 +1,6 @@
 serverAddr = "${PROXY}"
 serverPort = 7000
+
 auth.method = "token"
 auth.token = "${TOKEN}"
 
@@ -14,3 +15,9 @@ name = "app-${ID}"
 type = "http"
 localPort = 8181
 customDomains = ["app.${ID}.${PROXY}"]
+
+[[proxies]]
+name = "ssh-${ID}"
+type = "tcp"
+localPort = 22
+remotePort = 2438
