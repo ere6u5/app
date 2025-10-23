@@ -1,0 +1,24 @@
+[Unit]
+Description=My Flask Application
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/myapp
+Environment=APP_ENV=production
+ExecStart=/usr/bin/python3 /home/%i/myapp/app.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security (можно ослабить для домашней директории)
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target
