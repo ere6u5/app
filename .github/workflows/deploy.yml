@@ -33,17 +33,10 @@ jobs:
           echo "   User: ${{ secrets.SERVER_USER }}"
           echo "   Port: 2438"
           
+          echo "🚀 Starting deployment..."
           cd ~/myapp
-          echo "📥 Pulling latest changes..."
           git pull origin main
-          echo "📁 Files after pull:"
-          ls -la
-          echo "🔄 Running update script..."
           chmod +x setup.sh
-          ./setup.sh update
-          echo "🔍 Checking service status..."
-          sudo systemctl status myapp --no-pager || echo "Service status check failed"
-          echo "🐳 Checking Docker containers..."
-          docker ps || sudo docker ps
-          echo "✅ Deployment completed!"
-          echo "🌐 Application URL: http://app.$ID.$PROXY"
+          echo "${{ secrets.SERVER_PASSWORD }}" | sudo -S ./setup.sh update
+
+        
