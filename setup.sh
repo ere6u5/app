@@ -259,7 +259,7 @@ case "$1" in
     status)
         check_status
         ;;
-    update)
+        update)
         # Для обновления из репозитория
         echo "🔄 Updating application..."
         
@@ -267,17 +267,21 @@ case "$1" in
         echo "📁 Copying application files..."
         cp -f app.py requirements.txt Dockerfile $APP_DIR/
         
-        # Пересобираем Docker образ
+        # Пересобираем Docker образ с новыми файлами
         echo "🐳 Rebuilding Docker image..."
         cd $APP_DIR
-        docker build -t $DOCKER_IMAGE . || sudo docker build -t $DOCKER_IMAGE .
+        docker build -t $DOCKER_IMAGE . --no-cache
         cd -
+        
+        # Останавливаем старый контейнер
+        echo "🛑 Stopping old container..."
+        docker stop $DOCKER_CONTAINER 2>/dev/null || true
+        docker rm $DOCKER_CONTAINER 2>/dev/null || true
         
         # Перезапускаем сервис
         echo "🔄 Restarting services..."
         sudo systemctl stop myapp 2>/dev/null || true
         sudo systemctl start myapp
-        sudo systemctl status myapp --no-pager
         
         echo "✅ Application updated and restarted"
         ;;
