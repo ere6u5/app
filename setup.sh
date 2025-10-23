@@ -20,7 +20,7 @@ GITHUB_KEY="$SSH_DIR/github_actions"
 install_dependencies() {
     echo "📦 Installing dependencies..."
     sudo apt update
-    sudo apt install -y python3 python3-pip wget git
+    sudo apt install -y python3 python3-pip wget git openssh-server
 }
 
 setup_ssh_for_github() {
@@ -66,21 +66,49 @@ setup_ssh_for_github() {
 setup_ssh_port() {
     echo "🔧 Configuring SSH port 2438..."
     
+    # Убедимся что SSH сервер установлен и запущен
+    if ! systemctl is-active --quiet ssh; then
+        echo "🔄 Starting SSH server..."
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+    fi
+    
     # Проверяем текущую конфигурацию SSH
+    if [ ! -f "/etc/ssh/sshd_config" ]; then
+        echo "📁 Creating basic SSH config..."
+        sudo mkdir -p /etc/ssh
+        sudo tee /etc/ssh/sshd_config > /dev/null <<EOF
+Port 22
+Port 2438
+Protocol 2
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding yes
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server
+EOF
+        sudo systemctl restart ssh
+        echo "✅ Basic SSH config created with port 2438"
+        return
+    fi
+    
+    # Если файл существует, добавляем порт
     if ! sudo grep -q "^Port 2438" /etc/ssh/sshd_config; then
         echo "🔄 Adding port 2438 to SSH config..."
         
         # Создаем backup
         sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
         
-        # Добавляем порт 2438 (дополнительно к основному)
-        if sudo grep -q "^Port " /etc/ssh/sshd_config; then
-            # Если уже есть Port, добавляем второй порт
-            echo "Port 2438" | sudo tee -a /etc/ssh/sshd_config
-        else
-            # Заменяем/добавляем порт
-            sudo sed -i 's/^#Port 22/Port 22\nPort 2438/' /etc/ssh/sshd_config
-        fi
+        # Добавляем порт 2438
+        echo "Port 2438" | sudo tee -a /etc/ssh/sshd_config
         
         # Рестартуем SSH
         sudo systemctl restart ssh
@@ -152,10 +180,10 @@ start_services() {
 check_status() {
     echo ""
     echo "📊 === Service Status ==="
-    sudo systemctl status myapp --no-pager -l || true
+    sudo systemctl status myapp --no-pager -l 2>/dev/null || echo "⚠️  myapp service not running"
     echo ""
     echo "🔗 === FRP Status ==="
-    sudo systemctl status frpc --no-pager -l || true
+    sudo systemctl status frpc --no-pager -l 2>/dev/null || echo "⚠️  frpc service not running"
     echo ""
     echo "🌐 === Application URLs ==="
     echo "Local: http://localhost:8181"
@@ -192,11 +220,11 @@ case "$1" in
         check_status
         ;;
     stop)
-        sudo systemctl stop myapp frpc
+        sudo systemctl stop myapp frpc 2>/dev/null || true
         echo "✅ Services stopped"
         ;;
     restart)
-        sudo systemctl restart myapp frpc
+        sudo systemctl restart myapp frpc 2>/dev/null || true
         echo "✅ Services restarted"
         check_status
         ;;
