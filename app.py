@@ -10,7 +10,7 @@ def hello():
     print(f"{datetime.now()} - Root endpoint accessed")  # Простой вывод в консоль
     return jsonify({
         "status": "success", 
-        "message": "App Worked!11",
+        "message": "App Worked!111",
         "timestamp": datetime.now().isoformat()
     })
 
