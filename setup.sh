@@ -83,7 +83,6 @@ setup_ssh_port() {
         sudo mkdir -p /etc/ssh
         sudo tee /etc/ssh/sshd_config > /dev/null <<EOF
 Port 22
-Port 2438
 Protocol 2
 HostKey /etc/ssh/ssh_host_rsa_key
 HostKey /etc/ssh/ssh_host_ed25519_key
