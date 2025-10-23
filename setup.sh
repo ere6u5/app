@@ -8,7 +8,6 @@ echo "🚀 MyApp Setup Script (Docker Version)"
 if [ -z "$PROXY" ] || [ -z "$TOKEN" ] || [ -z "$ID" ]; then
     echo "❌ ERROR: Please set PROXY, TOKEN, and ID environment variables first"
     echo "   Add them to ~/.bashrc and run: source ~/.bashrc"
-    exit 1
 fi
 
 APP_USER=$(whoami)
