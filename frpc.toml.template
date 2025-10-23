@@ -1,0 +1,16 @@
+serverAddr = "${PROXY}"
+serverPort = 7000
+auth.method = "token"
+auth.token = "${TOKEN}"
+
+[[proxies]]
+name = "hook-${ID}"
+type = "http"
+localPort = 8080
+customDomains = ["webhook.${ID}.${PROXY}"]
+
+[[proxies]]
+name = "app-${ID}"
+type = "http"
+localPort = 8181
+customDomains = ["app.${ID}.${PROXY}"]
