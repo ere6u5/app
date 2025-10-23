@@ -36,8 +36,14 @@ jobs:
           cd ~/myapp
           echo "📥 Pulling latest changes..."
           git pull origin main
-          echo "🔄 Updating application..."
+          echo "📁 Files after pull:"
+          ls -la
+          echo "🔄 Running update script..."
           chmod +x setup.sh
           ./setup.sh update
+          echo "🔍 Checking service status..."
+          sudo systemctl status myapp --no-pager || echo "Service status check failed"
+          echo "🐳 Checking Docker containers..."
+          docker ps || sudo docker ps
           echo "✅ Deployment completed!"
           echo "🌐 Application URL: http://app.$ID.$PROXY"
